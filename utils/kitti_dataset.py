@@ -133,7 +133,16 @@ class KittiDataset(Dataset):
             # Assuming depth maps are in the processed_depth_dir, mirroring the structure
             processed_date_dir = os.path.join(self.processed_depth_dir, date_name)
             processed_drive_dir = os.path.join(processed_date_dir, date_drive_name)
-            depth_map_dir = os.path.join(processed_drive_dir, "depth_maps")
+
+            # Try both sparse and dense folder names
+            depth_map_dir_sparse = os.path.join(processed_drive_dir, "depth_maps")
+            depth_map_dir_dense = os.path.join(processed_drive_dir, "depth_maps_dense")
+
+            # Use whichever exists (prefer dense if both exist)
+            if os.path.exists(depth_map_dir_dense):
+                depth_map_dir = depth_map_dir_dense
+            else:
+                depth_map_dir = depth_map_dir_sparse
 
             calib_filepath = os.path.join(calib_base_dir, "calib_cam_to_cam.txt")
 
