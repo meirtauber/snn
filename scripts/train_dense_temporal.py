@@ -84,6 +84,11 @@ def train_one_epoch(
             prediction = model(sequence, intrinsics)  # (B, 1, H, W)
             loss = loss_fn(prediction, target_depth)
 
+        # Skip batch if loss is not finite
+        if not torch.isfinite(loss):
+            print(f"\nWarning: Skipping batch {batch_idx} - loss is {loss.item()}")
+            continue
+
         # Backward pass with gradient scaling
         scaler.scale(loss).backward()
 

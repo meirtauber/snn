@@ -90,7 +90,13 @@ class SSIMLoss(nn.Module):
         ssim_val = _ssim(
             img1, img2, window, self.window_size, channel, self.size_average
         )
-        return (1.0 - ssim_val) / 2.0
+        loss = (1.0 - ssim_val) / 2.0
+
+        # Ensure loss is finite
+        if not torch.isfinite(loss):
+            return torch.tensor(0.5, device=img1.device, dtype=img1.dtype)
+
+        return loss
 
 
 # --- Component 2: Scale-Invariant Logarithmic (SILog) Loss ---
@@ -114,6 +120,11 @@ class SILogLoss(nn.Module):
         prediction = prediction[mask]
         target = target[mask]
 
+        # Check if we have any valid pixels
+        if prediction.numel() == 0:
+            # No valid pixels - return zero loss
+            return torch.tensor(0.0, device=prediction.device, dtype=prediction.dtype)
+
         # Add a small epsilon to avoid taking the log of zero.
         d = torch.log(prediction + 1e-8) - torch.log(target + 1e-8)
 
@@ -122,7 +133,12 @@ class SILogLoss(nn.Module):
         variance = (d**2).mean()
         mean_term = (d.mean()) ** 2
 
-        return variance - self.variance_focus * mean_term
+        loss = variance - self.variance_focus * mean_term
+
+        # Clamp loss to prevent -inf or inf
+        loss = torch.clamp(loss, min=-100.0, max=100.0)
+
+        return loss
 
 
 # --- The "Teacher": Composite Loss Function ---
