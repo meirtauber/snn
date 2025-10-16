@@ -30,6 +30,11 @@ total=$(echo "$DRIVES" | wc -l)
 echo "Found ${total} unique drives in benchmark"
 echo ""
 
+# Debug: show first few drives
+echo "Sample drives found:"
+echo "$DRIVES" | head -3
+echo ""
+
 count=0
 success=0
 skipped=0
@@ -37,6 +42,7 @@ failed=0
 
 for drive_path in $DRIVES; do
     count=$((count + 1))
+    # drive_path format: "2011_09_26/2011_09_26_drive_0001_sync"
     date=$(echo $drive_path | cut -d'/' -f1)
     drive=$(echo $drive_path | cut -d'/' -f2)
 
