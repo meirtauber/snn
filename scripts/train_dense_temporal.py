@@ -519,6 +519,11 @@ if __name__ == "__main__":
 
     # Data arguments
     parser.add_argument(
+        "--benchmark-mode",
+        action="store_true",
+        help="Use official KITTI Depth Prediction Benchmark dataset (93K+ samples)",
+    )
+    parser.add_argument(
         "--kitti-root-dir",
         type=str,
         required=True,
@@ -528,7 +533,7 @@ if __name__ == "__main__":
         "--processed-depth-dir",
         type=str,
         required=True,
-        help="Directory containing preprocessed KITTI depth maps",
+        help="Directory containing preprocessed KITTI depth maps (or benchmark root if --benchmark-mode)",
     )
     parser.add_argument(
         "--img-height", type=int, default=384, help="Image height for model input"
