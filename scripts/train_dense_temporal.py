@@ -38,6 +38,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from models.dense_temporal_snn_depth import DenseTemporalSNNDepth
 from utils.losses import CompositeLoss
 from utils.kitti_dataset import KittiDataset
+from utils.kitti_benchmark_dataset import KITTIBenchmarkDataset
 from utils.metrics import compute_depth_metrics, MetricsTracker
 
 
@@ -266,27 +267,51 @@ def main(args):
         "hflip_p": args.hflip_p,
     }
 
-    train_dataset = KittiDataset(
-        kitti_root_dir=args.kitti_root_dir,
-        processed_depth_dir=args.processed_depth_dir,
-        split="train",
-        img_height=args.img_height,
-        img_width=args.img_width,
-        augmentation_params=augmentation_params,
-        sequence_length=args.sequence_length,
-        sequence_stride=args.sequence_stride,
-    )
+    # Choose dataset based on benchmark mode
+    if args.benchmark_mode:
+        print("Using KITTI Depth Prediction Benchmark dataset (93K+ dense annotations)")
+        train_dataset = KITTIBenchmarkDataset(
+            benchmark_root=args.processed_depth_dir,
+            split="train",
+            img_height=args.img_height,
+            img_width=args.img_width,
+            augmentation_params=augmentation_params,
+            sequence_length=args.sequence_length,
+            sequence_stride=args.sequence_stride,
+        )
 
-    val_dataset = KittiDataset(
-        kitti_root_dir=args.kitti_root_dir,
-        processed_depth_dir=args.processed_depth_dir,
-        split="val",
-        img_height=args.img_height,
-        img_width=args.img_width,
-        augmentation_params=None,  # No augmentation for validation
-        sequence_length=args.sequence_length,
-        sequence_stride=args.sequence_stride,
-    )
+        val_dataset = KITTIBenchmarkDataset(
+            benchmark_root=args.processed_depth_dir,
+            split="val",
+            img_height=args.img_height,
+            img_width=args.img_width,
+            augmentation_params=None,
+            sequence_length=args.sequence_length,
+            sequence_stride=args.sequence_stride,
+        )
+    else:
+        print("Using custom KITTI dataset (self-processed)")
+        train_dataset = KittiDataset(
+            kitti_root_dir=args.kitti_root_dir,
+            processed_depth_dir=args.processed_depth_dir,
+            split="train",
+            img_height=args.img_height,
+            img_width=args.img_width,
+            augmentation_params=augmentation_params,
+            sequence_length=args.sequence_length,
+            sequence_stride=args.sequence_stride,
+        )
+
+        val_dataset = KittiDataset(
+            kitti_root_dir=args.kitti_root_dir,
+            processed_depth_dir=args.processed_depth_dir,
+            split="val",
+            img_height=args.img_height,
+            img_width=args.img_width,
+            augmentation_params=None,
+            sequence_length=args.sequence_length,
+            sequence_stride=args.sequence_stride,
+        )
 
     # Create data loaders
     train_loader = DataLoader(
