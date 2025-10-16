@@ -75,9 +75,15 @@ class KITTIBenchmarkDataset(Dataset):
         """Load all depth maps and create temporal sequences."""
         samples = []
 
-        # Find all depth maps
-        depth_pattern = f"*/*/proj_depth/groundtruth/image_02/*.png"
-        depth_files = sorted(self.depth_root.glob(depth_pattern))
+        # Find all depth maps - try both possible structures
+        depth_pattern1 = (
+            f"*/*/proj_depth/groundtruth/image_02/*.png"  # train/date/drive/...
+        )
+        depth_pattern2 = f"*/proj_depth/groundtruth/image_02/*.png"  # train/drive/...
+
+        depth_files = sorted(self.depth_root.glob(depth_pattern1))
+        if len(depth_files) == 0:
+            depth_files = sorted(self.depth_root.glob(depth_pattern2))
 
         if len(depth_files) == 0:
             raise ValueError(f"No depth maps found in {self.depth_root}")
@@ -88,10 +94,23 @@ class KITTIBenchmarkDataset(Dataset):
         drive_groups = defaultdict(list)
 
         for depth_path in depth_files:
-            # Parse: train/2011_09_26/2011_09_26_drive_0001_sync/proj_depth/groundtruth/image_02/0000000000.png
+            # Parse: train/2011_09_26_drive_0001_sync/proj_depth/groundtruth/image_02/0000000000.png
+            # OR:    train/2011_09_26/2011_09_26_drive_0001_sync/proj_depth/groundtruth/image_02/0000000000.png
             parts = depth_path.parts
-            date = parts[-7]
-            drive = parts[-6]
+
+            # Detect structure by checking if we have date subfolder
+            if (
+                len(parts) >= 7 and parts[-7].count("_") == 2
+            ):  # Has date folder (2011_09_26)
+                date = parts[-7]
+                drive = parts[-6]
+            else:  # No date folder
+                drive = parts[-6]
+                # Extract date from drive name (first 10 chars)
+                date = "_".join(
+                    drive.split("_")[:3]
+                )  # Get "2011_09_26" from "2011_09_26_drive_0001_sync"
+
             frame_id = depth_path.stem
 
             drive_key = f"{date}/{drive}"
