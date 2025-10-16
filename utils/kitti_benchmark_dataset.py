@@ -124,6 +124,10 @@ class KITTIBenchmarkDataset(Dataset):
             )
 
         # Create temporal sequences within each drive
+        total_drives = len(drive_groups)
+        drives_with_rgb = 0
+        total_potential_sequences = 0
+
         for drive_key, frames in drive_groups.items():
             # Sort by frame_id
             frames = sorted(frames, key=lambda x: x["frame_id"])
@@ -131,6 +135,29 @@ class KITTIBenchmarkDataset(Dataset):
             # Skip if not enough frames for a sequence
             if len(frames) < self.sequence_length:
                 continue
+
+            # Check if this drive has any RGB images
+            test_frame = frames[0]
+            test_rgb_path = (
+                self.rgb_root
+                / test_frame["date"]
+                / test_frame["drive"]
+                / "image_02"
+                / "data"
+                / f"{test_frame['frame_id']}.png"
+            )
+
+            if not test_rgb_path.parent.exists():
+                # Try to find the RGB directory to debug
+                if len(samples) == 0:  # Only print debug for first missing drive
+                    print(f"[DEBUG] RGB path doesn't exist for drive {drive_key}")
+                    print(f"[DEBUG] Looking for: {test_rgb_path}")
+                    print(f"[DEBUG] RGB root: {self.rgb_root}")
+                continue
+
+            drives_with_rgb += 1
+            potential_seqs = len(frames) - self.sequence_length + 1
+            total_potential_sequences += potential_seqs
 
             # Create sliding window sequences
             for i in range(
@@ -166,6 +193,11 @@ class KITTIBenchmarkDataset(Dataset):
                             "drive": drive_key,
                         }
                     )
+
+        print(f"[DEBUG] Total drives with depth: {total_drives}")
+        print(f"[DEBUG] Drives with RGB images: {drives_with_rgb}")
+        print(f"[DEBUG] Total potential sequences: {total_potential_sequences}")
+        print(f"[DEBUG] Valid sequences (with all RGB): {len(samples)}")
 
         return samples
 
