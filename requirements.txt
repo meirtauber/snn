@@ -1,0 +1,30 @@
+# Core dependencies for SNN Depth Estimation Project
+
+# Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+snntorch>=0.7.0
+
+# Scientific Computing
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Computer Vision
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Progress and Utilities
+tqdm>=4.65.0
+tensorboard>=2.13.0
+
+# CARLA Simulator (install separately)
+# Install from: ~/carla_workspace/PythonAPI/carla/dist/carla-0.9.16-cp312-*.whl
+# Command: uv pip install ~/carla_workspace/PythonAPI/carla/dist/carla-0.9.16-cp312-*.whl
+
+# Optional: For Jupyter notebook analysis
+# jupyter>=1.0.0
+# ipywidgets>=8.0.0
