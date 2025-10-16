@@ -20,7 +20,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 
 import os
 import argparse
@@ -82,7 +82,7 @@ def train_one_epoch(
         optimizer.zero_grad()
 
         # Forward pass with mixed precision
-        with autocast():
+        with autocast(device_type="cuda"):
             prediction = model(sequence, intrinsics)  # (B, 1, H, W)
             loss = loss_fn(prediction, target_depth)
 
@@ -163,7 +163,7 @@ def validate(model, loader, loss_fn, device, epoch):
             intrinsics = batch_data["intrinsics"].to(device)
 
             # Forward pass with mixed precision
-            with autocast():
+            with autocast(device_type="cuda"):
                 prediction = model(sequence, intrinsics)
                 loss = loss_fn(prediction, target_depth)
 
@@ -367,7 +367,7 @@ def main(args):
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.min_lr)
 
     # Mixed precision scaler
-    scaler = GradScaler()
+    scaler = GradScaler(device="cuda")
 
     # Training history
     history = {

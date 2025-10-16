@@ -52,6 +52,8 @@ class KITTIBenchmarkDataset(Dataset):
         sequence_length=4,
         sequence_stride=1,
         augmentation_params=None,
+        auto_split_train=True,
+        val_split_ratio=0.1,
     ):
         self.benchmark_root = Path(benchmark_root)
         self.split = split
@@ -60,6 +62,8 @@ class KITTIBenchmarkDataset(Dataset):
         self.sequence_length = sequence_length
         self.sequence_stride = sequence_stride
         self.augmentation_params = augmentation_params if split == "train" else None
+        self.auto_split_train = auto_split_train
+        self.val_split_ratio = val_split_ratio
 
         # Paths
         self.depth_root = self.benchmark_root / split
@@ -211,6 +215,163 @@ class KITTIBenchmarkDataset(Dataset):
         print(f"[DEBUG] Total potential sequences: {total_potential_sequences}")
         print(f"[DEBUG] Valid sequences (with all RGB): {len(samples)}")
 
+        # Auto-split train data into train/val if val split is empty and auto_split is enabled
+        if len(samples) == 0 and self.split == "val" and self.auto_split_train:
+            print(
+                f"[INFO] Validation split is empty. Loading from train split instead..."
+            )
+            # Load from train directory
+            train_depth_root = self.benchmark_root / "train"
+
+            # Temporarily switch to train directory
+            original_depth_root = self.depth_root
+            self.depth_root = train_depth_root
+
+            # Load train samples
+            train_samples = self._load_samples_from_depth_root()
+
+            # Restore original depth root
+            self.depth_root = original_depth_root
+
+            # Split train samples into train/val
+            if len(train_samples) > 0:
+                import random
+
+                random.seed(42)  # For reproducibility
+                random.shuffle(train_samples)
+
+                val_size = int(len(train_samples) * self.val_split_ratio)
+                samples = train_samples[:val_size]
+
+                print(
+                    f"[INFO] Created validation split: {len(samples)} sequences ({self.val_split_ratio * 100:.0f}% of training data)"
+                )
+            else:
+                print(
+                    f"[WARNING] No training data found either. Dataset will be empty."
+                )
+
+        elif len(samples) > 0 and self.split == "train" and self.auto_split_train:
+            # For train split, remove validation samples to avoid overlap
+            import random
+
+            random.seed(42)
+            shuffled = samples.copy()
+            random.shuffle(shuffled)
+
+            val_size = int(len(shuffled) * self.val_split_ratio)
+            samples = shuffled[val_size:]  # Use remaining samples for training
+
+            print(
+                f"[INFO] Using {len(samples)} sequences for training (reserved {val_size} for validation)"
+            )
+
+        return samples
+
+    def _load_samples_from_depth_root(self):
+        """Helper method to load samples from current depth_root (used for auto-splitting)."""
+        samples = []
+
+        # Find all depth maps - try both possible structures
+        depth_pattern1 = (
+            f"*/*/proj_depth/groundtruth/image_02/*.png"  # train/date/drive/...
+        )
+        depth_pattern2 = f"*/proj_depth/groundtruth/image_02/*.png"  # train/drive/...
+
+        depth_files = sorted(self.depth_root.glob(depth_pattern1))
+        if len(depth_files) == 0:
+            depth_files = sorted(self.depth_root.glob(depth_pattern2))
+
+        if len(depth_files) == 0:
+            return []
+
+        # Group by drive
+        from collections import defaultdict
+
+        drive_groups = defaultdict(list)
+
+        for depth_path in depth_files:
+            parts = depth_path.parts
+
+            # Detect structure by checking part names
+            drive = None
+            date = None
+
+            for i, part in enumerate(parts):
+                if "_drive_" in part and part.endswith("_sync"):
+                    drive = part
+                    date = "_".join(part.split("_")[:3])
+                    break
+
+            if drive is None:
+                continue
+
+            frame_id = depth_path.stem
+
+            drive_key = f"{date}/{drive}"
+            drive_groups[drive_key].append(
+                {
+                    "depth_path": depth_path,
+                    "frame_id": frame_id,
+                    "date": date,
+                    "drive": drive,
+                }
+            )
+
+        # Create temporal sequences within each drive
+        for drive_key, frames in drive_groups.items():
+            frames = sorted(frames, key=lambda x: x["frame_id"])
+
+            if len(frames) < self.sequence_length:
+                continue
+
+            # Check if this drive has any RGB images
+            test_frame = frames[0]
+            test_rgb_path = (
+                self.rgb_root
+                / test_frame["date"]
+                / test_frame["drive"]
+                / "image_02"
+                / "data"
+                / f"{test_frame['frame_id']}.png"
+            )
+
+            if not test_rgb_path.parent.exists():
+                continue
+
+            # Create sliding window sequences
+            for i in range(
+                0, len(frames) - self.sequence_length + 1, self.sequence_stride
+            ):
+                sequence_frames = frames[i : i + self.sequence_length]
+
+                # Verify RGB images exist for all frames
+                rgb_paths = []
+                all_exist = True
+
+                for frame in sequence_frames:
+                    rgb_path = (
+                        self.rgb_root
+                        / frame["date"]
+                        / frame["drive"]
+                        / "image_02"
+                        / "data"
+                        / f"{frame['frame_id']}.png"
+                    )
+                    if not rgb_path.exists():
+                        all_exist = False
+                        break
+                    rgb_paths.append(rgb_path)
+
+                if all_exist:
+                    samples.append(
+                        {
+                            "rgb_paths": rgb_paths,
+                            "depth_path": sequence_frames[-1]["depth_path"],
+                            "drive": drive_key,
+                        }
+                    )
+
         return samples
 
     def __len__(self):
@@ -307,11 +468,15 @@ class KITTIBenchmarkDataset(Dataset):
             saturation = self.augmentation_params.get("saturation", (1.0, 1.0))
             hue = self.augmentation_params.get("hue", (0.0, 0.0))
 
+            # Clamp hue values to valid range [-0.5, 0.5] to avoid overflow
+            hue_min = max(-0.5, hue[0])
+            hue_max = min(0.5, hue[1])
+
             color_jitter = transforms.ColorJitter(
                 brightness=brightness,
                 contrast=contrast,
                 saturation=saturation,
-                hue=hue,
+                hue=(hue_min, hue_max),
             )
 
             # Apply same jitter to all frames
