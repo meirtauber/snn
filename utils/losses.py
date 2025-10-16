@@ -149,18 +149,24 @@ class CompositeLoss(nn.Module):
     Combines multiple loss functions with specified weights.
     This provides a comprehensive training signal that rewards both
     pixel-wise accuracy and structural correctness.
+
+    Rebalanced to emphasize depth accuracy (MAE/Abs Rel) over structural similarity.
     """
 
-    def __init__(self, alpha_ssim=0.85, beta_silog=1.0, variance_focus=0.85):
+    def __init__(
+        self, alpha_ssim=0.5, beta_silog=1.0, gamma_l1=1.0, variance_focus=0.85
+    ):
         super(CompositeLoss, self).__init__()
         self.alpha_ssim = alpha_ssim
         self.beta_silog = beta_silog
+        self.gamma_l1 = gamma_l1
 
         self.ssim_loss = SSIMLoss()
         self.silog_loss = SILogLoss(variance_focus=variance_focus)
 
         print(
-            f"CompositeLoss initialized with weights: SSIM={self.alpha_ssim}, SILog={self.beta_silog}"
+            f"CompositeLoss initialized with weights: SSIM={self.alpha_ssim}, "
+            f"SILog={self.beta_silog}, L1={self.gamma_l1}"
         )
 
     def forward(self, prediction, target):
@@ -180,8 +186,17 @@ class CompositeLoss(nn.Module):
         silog = self.silog_loss(prediction, target, mask)
         ssim = self.ssim_loss(prediction, target)
 
+        # L1 loss (MAE) - directly optimizes for absolute error metric
+        if mask.sum() > 0:
+            l1 = torch.abs(prediction[mask] - target[mask]).mean()
+        else:
+            l1 = torch.tensor(0.0, device=prediction.device, dtype=prediction.dtype)
+
         # Combine them with weights
-        total_loss = (self.beta_silog * silog) + (self.alpha_ssim * ssim)
+        # Reduced SSIM weight from 0.85 to 0.5 to emphasize depth accuracy over structure
+        total_loss = (
+            (self.beta_silog * silog) + (self.alpha_ssim * ssim) + (self.gamma_l1 * l1)
+        )
 
         return total_loss
 

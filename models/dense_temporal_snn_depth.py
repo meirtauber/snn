@@ -44,18 +44,20 @@ class SNNTemporalFusion(nn.Module):
     into a single, temporally-aware feature map using spiking dynamics.
     """
 
-    def __init__(self, in_channels, out_channels, num_steps=5, beta=0.9):
+    def __init__(self, in_channels, out_channels, num_steps=5, beta=0.9, dropout_p=0.3):
         super().__init__()
         self.num_steps = num_steps
         spike_grad = surrogate.fast_sigmoid(slope=25)
 
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(out_channels)
+        self.dropout1 = nn.Dropout2d(p=dropout_p)
         self.lif1 = snn.Leaky(
             beta=beta, spike_grad=spike_grad, init_hidden=True, threshold=1.0
         )
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channels)
+        self.dropout2 = nn.Dropout2d(p=dropout_p)
         self.lif2 = snn.Leaky(
             beta=beta, spike_grad=spike_grad, init_hidden=True, threshold=1.0
         )
@@ -67,9 +69,9 @@ class SNNTemporalFusion(nn.Module):
         for t in range(feature_sequence.size(1)):
             frame_features = feature_sequence[:, t]
             for _ in range(self.num_steps):
-                cur1 = self.bn1(self.conv1(frame_features))
+                cur1 = self.dropout1(self.bn1(self.conv1(frame_features)))
                 spk1 = self.lif1(cur1)
-                cur2 = self.bn2(self.conv2(spk1))
+                cur2 = self.dropout2(self.bn2(self.conv2(spk1)))
                 _ = self.lif2(cur2)
         return self.lif2.mem
 
@@ -81,7 +83,7 @@ class FusionDecoder(nn.Module):
     incorporating skip connections from the hierarchical backbone at each stage.
     """
 
-    def __init__(self, snn_channels, skip_channels, decoder_channels):
+    def __init__(self, snn_channels, skip_channels, decoder_channels, dropout_p=0.3):
         super().__init__()
         # skip_channels are ordered from deep to shallow (e.g., [384, 192, 96])
         # decoder_channels are internal layer sizes (e.g., [256, 128, 64, 32])
@@ -90,6 +92,7 @@ class FusionDecoder(nn.Module):
         self.iconv1 = nn.Conv2d(
             decoder_channels[0] + skip_channels[0], decoder_channels[0], 3, padding=1
         )
+        self.dropout1 = nn.Dropout2d(p=dropout_p)
 
         self.upconv2 = nn.ConvTranspose2d(
             decoder_channels[0], decoder_channels[1], 2, 2
@@ -97,6 +100,7 @@ class FusionDecoder(nn.Module):
         self.iconv2 = nn.Conv2d(
             decoder_channels[1] + skip_channels[1], decoder_channels[1], 3, padding=1
         )
+        self.dropout2 = nn.Dropout2d(p=dropout_p)
 
         self.upconv3 = nn.ConvTranspose2d(
             decoder_channels[1], decoder_channels[2], 2, 2
@@ -104,11 +108,13 @@ class FusionDecoder(nn.Module):
         self.iconv3 = nn.Conv2d(
             decoder_channels[2] + skip_channels[2], decoder_channels[2], 3, padding=1
         )
+        self.dropout3 = nn.Dropout2d(p=dropout_p)
 
         self.upconv4 = nn.ConvTranspose2d(
             decoder_channels[2], decoder_channels[3], 2, 2
         )
         self.iconv4 = nn.Conv2d(decoder_channels[3], decoder_channels[3], 3, padding=1)
+        self.dropout4 = nn.Dropout2d(p=dropout_p)
 
         self.pred_conv = nn.Conv2d(decoder_channels[3], 1, 1)
 
@@ -117,23 +123,36 @@ class FusionDecoder(nn.Module):
         skips = skip_connections[::-1]
 
         x = nn.functional.relu(self.upconv1(temporal_features))
-        x = nn.functional.relu(self.iconv1(torch.cat([x, skips[0]], dim=1)))
+        x = self.dropout1(
+            nn.functional.relu(self.iconv1(torch.cat([x, skips[0]], dim=1)))
+        )
 
         x = nn.functional.relu(self.upconv2(x))
-        x = nn.functional.relu(self.iconv2(torch.cat([x, skips[1]], dim=1)))
+        x = self.dropout2(
+            nn.functional.relu(self.iconv2(torch.cat([x, skips[1]], dim=1)))
+        )
 
         x = nn.functional.relu(self.upconv3(x))
-        x = nn.functional.relu(self.iconv3(torch.cat([x, skips[2]], dim=1)))
+        x = self.dropout3(
+            nn.functional.relu(self.iconv3(torch.cat([x, skips[2]], dim=1)))
+        )
 
         x = nn.functional.relu(self.upconv4(x))
-        x = nn.functional.relu(self.iconv4(x))
+        x = self.dropout4(nn.functional.relu(self.iconv4(x)))
 
         return self.pred_conv(x)
 
 
 # --- Main Orchestrator Model ---
 class DenseTemporalSNNDepth(nn.Module):
-    def __init__(self, min_depth=0.1, max_depth=80.0, img_width=1280, img_height=384):
+    def __init__(
+        self,
+        min_depth=0.1,
+        max_depth=80.0,
+        img_width=1280,
+        img_height=384,
+        dropout_p=0.3,
+    ):
         super().__init__()
         self.min_depth = min_depth
         self.max_depth = max_depth
@@ -150,12 +169,13 @@ class DenseTemporalSNNDepth(nn.Module):
         decoder_channels = [256, 128, 64, 32]  # Internal decoder layer sizes
 
         self.temporal_fusion = SNNTemporalFusion(
-            in_channels=snn_channels, out_channels=snn_channels
+            in_channels=snn_channels, out_channels=snn_channels, dropout_p=dropout_p
         )
         self.decoder = FusionDecoder(
             snn_channels=snn_channels,
             skip_channels=skip_channels[::-1],  # Pass reversed: [384, 192, 96]
             decoder_channels=decoder_channels,
+            dropout_p=dropout_p,
         )
         self.sigmoid = nn.Sigmoid()
 

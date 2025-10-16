@@ -317,16 +317,20 @@ def main(args):
         max_depth=args.max_depth,
         img_width=args.img_width,
         img_height=args.img_height,
-        # sequence_length=4, # Assuming T=4 frames for temporal SNN
+        dropout_p=args.dropout,
     ).to(device)
 
     num_params = count_parameters(model)
     print(f"Total parameters: {num_params:,}")
     print(f"Model size: ~{num_params * 4 / 1024 / 1024:.1f} MB (FP32)")
+    print(f"Dropout rate: {args.dropout}")
 
     # Create loss function
     loss_fn = CompositeLoss(
-        alpha_ssim=args.ssim_weight, beta_silog=args.silog_weight, variance_focus=0.85
+        alpha_ssim=args.ssim_weight,
+        beta_silog=args.silog_weight,
+        gamma_l1=args.l1_weight,
+        variance_focus=0.85,
     )
 
     # Create optimizer
@@ -529,47 +533,59 @@ if __name__ == "__main__":
         help="Stride between consecutive sequences (1 = overlapping, >1 = skip frames)",
     )
 
-    # Augmentation arguments
+    # Augmentation arguments (strengthened defaults to combat overfitting)
     parser.add_argument(
         "--brightness-min",
         type=float,
-        default=0.8,
+        default=0.6,  # Increased from 0.8 for stronger augmentation
         help="Min brightness for color jitter",
     )
     parser.add_argument(
         "--brightness-max",
         type=float,
-        default=1.2,
+        default=1.4,  # Increased from 1.2 for stronger augmentation
         help="Max brightness for color jitter",
     )
     parser.add_argument(
-        "--contrast-min", type=float, default=0.8, help="Min contrast for color jitter"
+        "--contrast-min",
+        type=float,
+        default=0.6,
+        help="Min contrast for color jitter",  # Increased from 0.8
     )
     parser.add_argument(
-        "--contrast-max", type=float, default=1.2, help="Max contrast for color jitter"
+        "--contrast-max",
+        type=float,
+        default=1.4,
+        help="Max contrast for color jitter",  # Increased from 1.2
     )
     parser.add_argument(
         "--saturation-min",
         type=float,
-        default=0.8,
+        default=0.6,  # Increased from 0.8
         help="Min saturation for color jitter",
     )
     parser.add_argument(
         "--saturation-max",
         type=float,
-        default=1.2,
+        default=1.4,  # Increased from 1.2
         help="Max saturation for color jitter",
     )
     parser.add_argument(
-        "--hue-min", type=float, default=-0.1, help="Min hue for color jitter"
+        "--hue-min",
+        type=float,
+        default=-0.2,
+        help="Min hue for color jitter",  # Increased from -0.1
     )
     parser.add_argument(
-        "--hue-max", type=float, default=0.1, help="Max hue for color jitter"
+        "--hue-max",
+        type=float,
+        default=0.2,
+        help="Max hue for color jitter",  # Increased from 0.1
     )
     parser.add_argument(
         "--grayscale-p",
         type=float,
-        default=0.1,
+        default=0.2,  # Increased from 0.1
         help="Probability of grayscale augmentation",
     )
     parser.add_argument(
@@ -603,15 +619,32 @@ if __name__ == "__main__":
         "--clip-grad", type=float, default=1.0, help="Gradient clipping max norm"
     )
 
-    # Loss weights
+    # Loss weights (rebalanced to emphasize depth accuracy)
     parser.add_argument(
-        "--ssim-weight", type=float, default=0.85, help="Weight for SSIM loss component"
+        "--ssim-weight",
+        type=float,
+        default=0.5,
+        help="Weight for SSIM loss component (reduced from 0.85)",
     )
     parser.add_argument(
         "--silog-weight",
         type=float,
         default=1.0,
         help="Weight for SILog loss component",
+    )
+    parser.add_argument(
+        "--l1-weight",
+        type=float,
+        default=1.0,
+        help="Weight for L1 (MAE) loss component - directly optimizes validation metric",
+    )
+
+    # Regularization arguments
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.3,
+        help="Dropout probability for regularization (0.0-0.5)",
     )
 
     # Output arguments
