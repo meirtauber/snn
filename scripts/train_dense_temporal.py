@@ -28,6 +28,7 @@ import time
 import json
 from pathlib import Path
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 # Add parent directory to path
 import sys
@@ -246,6 +247,10 @@ def main(args):
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Output directory: {output_dir}")
 
+    # Setup TensorBoard
+    writer = SummaryWriter(log_dir=output_dir / "tensorboard")
+    print(f"TensorBoard logs: {output_dir / 'tensorboard'}")
+
     # Load datasets
     print(f"\n{'=' * 70}")
     print("LOADING DATASETS")
@@ -406,6 +411,17 @@ def main(args):
         history["val_delta_1"].append(val_metrics["delta_1"])
         history["learning_rate"].append(current_lr)
 
+        # Log to TensorBoard
+        writer.add_scalar("Loss/train", train_metrics["loss"], epoch)
+        writer.add_scalar("Loss/val", val_metrics["loss"], epoch)
+        writer.add_scalar("MAE/train", train_metrics["mae"], epoch)
+        writer.add_scalar("MAE/val", val_metrics["mae"], epoch)
+        writer.add_scalar("AbsRel/train", train_metrics["abs_rel"], epoch)
+        writer.add_scalar("AbsRel/val", val_metrics["abs_rel"], epoch)
+        writer.add_scalar("Delta1/train", train_metrics["delta_1"], epoch)
+        writer.add_scalar("Delta1/val", val_metrics["delta_1"], epoch)
+        writer.add_scalar("Learning_Rate", current_lr, epoch)
+
         # Print epoch summary
         epoch_time = time.time() - epoch_start
         print(
@@ -459,6 +475,9 @@ def main(args):
 
     # Save final history
     save_training_history(history, output_dir)
+
+    # Close TensorBoard writer
+    writer.close()
 
     print(f"\n{'=' * 70}\n")
 
