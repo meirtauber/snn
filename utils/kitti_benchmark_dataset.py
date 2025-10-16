@@ -296,7 +296,8 @@ class KITTIBenchmarkDataset(Dataset):
                 rgb_sequence = [
                     rgb.transpose(Image.FLIP_LEFT_RIGHT) for rgb in rgb_sequence
                 ]
-                depth = np.fliplr(depth)
+                # Make a copy to avoid negative strides
+                depth = np.fliplr(depth).copy()
                 # Adjust cx for flip
                 K_resized[0, 2] = self.img_width - K_resized[0, 2]
 
