@@ -47,6 +47,7 @@ for drive_path in $DRIVES; do
     # Extract date from drive name (first 10 chars: YYYY_MM_DD)
     date=$(echo $drive_path | cut -d'_' -f1-3)  # Gets "2011_09_26"
     drive=$drive_path
+    drive_base=$(echo $drive_path | sed 's/_sync$//')  # Remove _sync for URL
 
     echo -e "${YELLOW}[$count/$total] Processing $date/$drive...${NC}"
 
@@ -83,8 +84,9 @@ for drive_path in $DRIVES; do
 
     # Download drive with resume capability and better error handling
     echo "  Downloading RGB images..."
+    # URL format: /raw_data/{drive_without_sync}/{drive_with_sync}.zip
     if wget --timeout=60 --tries=3 -c -P raw_kitti/ \
-        "https://s3.eu-central-1.amazonaws.com/avg-kitti/raw_data/${drive}/${drive}.zip" 2>&1 | \
+        "https://s3.eu-central-1.amazonaws.com/avg-kitti/raw_data/${drive_base}/${drive}.zip" 2>&1 | \
         grep -E "saved|ERROR|failed" || true; then
 
         if [ -f "raw_kitti/${drive}.zip" ]; then
