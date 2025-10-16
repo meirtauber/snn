@@ -38,13 +38,13 @@ failed=0
 for drive_path in $DRIVES; do
     count=$((count + 1))
     date=$(echo $drive_path | cut -d'/' -f1)
-    drive=$(echo $drive_path | cut -d'/' -f2 | sed 's/_sync//')
+    drive=$(echo $drive_path | cut -d'/' -f2)
 
-    echo -e "${YELLOW}[$count/$total] Processing $drive...${NC}"
+    echo -e "${YELLOW}[$count/$total] Processing $date/$drive...${NC}"
 
     # Check if RGB images already exist
-    if [ -d "raw_kitti/$drive_path/image_02/data" ]; then
-        rgb_count=$(find "raw_kitti/$drive_path/image_02/data" -name "*.png" 2>/dev/null | wc -l)
+    if [ -d "raw_kitti/$date/$drive/image_02/data" ]; then
+        rgb_count=$(find "raw_kitti/$date/$drive/image_02/data" -name "*.png" 2>/dev/null | wc -l)
         if [ $rgb_count -gt 0 ]; then
             echo -e "  ${GREEN}✓ Already exists ($rgb_count images), skipping${NC}"
             skipped=$((skipped + 1))
@@ -75,19 +75,19 @@ for drive_path in $DRIVES; do
     # Download drive with resume capability and better error handling
     echo "  Downloading RGB images..."
     if wget --timeout=60 --tries=3 -c -P raw_kitti/ \
-        "https://s3.eu-central-1.amazonaws.com/avg-kitti/raw_data/$drive/${drive}_sync.zip" 2>&1 | \
+        "https://s3.eu-central-1.amazonaws.com/avg-kitti/raw_data/${drive}/${drive}.zip" 2>&1 | \
         grep -E "saved|ERROR|failed" || true; then
 
-        if [ -f "raw_kitti/${drive}_sync.zip" ]; then
+        if [ -f "raw_kitti/${drive}.zip" ]; then
             # Verify zip is valid before extracting
-            if unzip -t "raw_kitti/${drive}_sync.zip" >/dev/null 2>&1; then
+            if unzip -t "raw_kitti/${drive}.zip" >/dev/null 2>&1; then
                 echo "  Extracting..."
-                if unzip -q -o "raw_kitti/${drive}_sync.zip" -d raw_kitti/ 2>/dev/null; then
-                    rm "raw_kitti/${drive}_sync.zip"
+                if unzip -q -o "raw_kitti/${drive}.zip" -d raw_kitti/${date}/ 2>/dev/null; then
+                    rm "raw_kitti/${drive}.zip"
 
                     # Verify extraction
-                    if [ -d "raw_kitti/$drive_path/image_02/data" ]; then
-                        img_count=$(find "raw_kitti/$drive_path/image_02/data" -name "*.png" 2>/dev/null | wc -l)
+                    if [ -d "raw_kitti/$date/$drive/image_02/data" ]; then
+                        img_count=$(find "raw_kitti/$date/$drive/image_02/data" -name "*.png" 2>/dev/null | wc -l)
                         echo -e "  ${GREEN}✓ Complete ($img_count images)${NC}"
                         success=$((success + 1))
                     else
@@ -96,12 +96,12 @@ for drive_path in $DRIVES; do
                     fi
                 else
                     echo -e "  ${RED}✗ Extraction failed${NC}"
-                    rm -f "raw_kitti/${drive}_sync.zip"
+                    rm -f "raw_kitti/${drive}.zip"
                     failed=$((failed + 1))
                 fi
             else
                 echo -e "  ${RED}✗ Downloaded zip is corrupted, removing${NC}"
-                rm -f "raw_kitti/${drive}_sync.zip"
+                rm -f "raw_kitti/${drive}.zip"
                 failed=$((failed + 1))
             fi
         else
