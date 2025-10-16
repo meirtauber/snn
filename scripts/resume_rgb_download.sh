@@ -93,17 +93,27 @@ for drive_path in $DRIVES; do
             # Verify zip is valid before extracting
             if unzip -t "raw_kitti/${drive}.zip" >/dev/null 2>&1; then
                 echo "  Extracting..."
-                mkdir -p "raw_kitti/${date}"
-                if unzip -q -o "raw_kitti/${drive}.zip" -d raw_kitti/${date}/ 2>/dev/null; then
+                mkdir -p "raw_kitti"
+                # Extract to raw_kitti/ - the zip contains date/drive structure internally
+                if unzip -q -o "raw_kitti/${drive}.zip" -d raw_kitti/ 2>/dev/null; then
                     rm "raw_kitti/${drive}.zip"
 
-                    # Verify extraction
+                    # Verify extraction - check both possible locations
                     if [ -d "raw_kitti/$date/$drive/image_02/data" ]; then
                         img_count=$(find "raw_kitti/$date/$drive/image_02/data" -name "*.png" 2>/dev/null | wc -l)
                         echo -e "  ${GREEN}✓ Complete ($img_count images)${NC}"
                         success=$((success + 1))
+                    elif [ -d "raw_kitti/$drive/image_02/data" ]; then
+                        # Some zips might not have date folder, move it
+                        mkdir -p "raw_kitti/$date"
+                        mv "raw_kitti/$drive" "raw_kitti/$date/"
+                        img_count=$(find "raw_kitti/$date/$drive/image_02/data" -name "*.png" 2>/dev/null | wc -l)
+                        echo -e "  ${GREEN}✓ Complete ($img_count images, reorganized)${NC}"
+                        success=$((success + 1))
                     else
                         echo -e "  ${RED}✗ Extraction failed - no images found${NC}"
+                        echo "  Debug: Checking what was extracted..."
+                        find raw_kitti -name "*$drive*" -type d | head -5
                         failed=$((failed + 1))
                     fi
                 else
