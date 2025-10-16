@@ -24,7 +24,8 @@ echo "Cleaning up corrupted downloads..."
 find raw_kitti -name "*.zip" -size -1M -delete 2>/dev/null || true
 
 # Get list of drives that need RGB images
-DRIVES=$(find train -type d -name "*_drive_*_sync" | sed 's|train/||' | sort -u)
+# train structure: train/2011_09_26_drive_0001_sync/proj_depth/...
+DRIVES=$(find train -maxdepth 1 -type d -name "*_drive_*_sync" | sed 's|train/||' | sort -u)
 
 total=$(echo "$DRIVES" | wc -l)
 echo "Found ${total} unique drives in benchmark"
@@ -42,9 +43,10 @@ failed=0
 
 for drive_path in $DRIVES; do
     count=$((count + 1))
-    # drive_path format: "2011_09_26/2011_09_26_drive_0001_sync"
-    date=$(echo $drive_path | cut -d'/' -f1)
-    drive=$(echo $drive_path | cut -d'/' -f2)
+    # drive_path format: "2011_09_26_drive_0001_sync"
+    # Extract date from drive name (first 10 chars: YYYY_MM_DD)
+    date=$(echo $drive_path | cut -d'_' -f1-3)  # Gets "2011_09_26"
+    drive=$drive_path
 
     echo -e "${YELLOW}[$count/$total] Processing $date/$drive...${NC}"
 
@@ -61,6 +63,7 @@ for drive_path in $DRIVES; do
     # Download calibration if needed
     if [ ! -f "raw_kitti/$date/calib_cam_to_cam.txt" ]; then
         echo "  Downloading calibration for $date..."
+        mkdir -p "raw_kitti/$date"
         if wget --timeout=30 --tries=3 -c -P raw_kitti/ \
             "https://s3.eu-central-1.amazonaws.com/avg-kitti/raw_data/${date}_calib.zip" 2>/dev/null; then
 
@@ -88,6 +91,7 @@ for drive_path in $DRIVES; do
             # Verify zip is valid before extracting
             if unzip -t "raw_kitti/${drive}.zip" >/dev/null 2>&1; then
                 echo "  Extracting..."
+                mkdir -p "raw_kitti/${date}"
                 if unzip -q -o "raw_kitti/${drive}.zip" -d raw_kitti/${date}/ 2>/dev/null; then
                     rm "raw_kitti/${drive}.zip"
 
