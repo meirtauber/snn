@@ -98,18 +98,30 @@ class KITTIBenchmarkDataset(Dataset):
             # OR:    train/2011_09_26/2011_09_26_drive_0001_sync/proj_depth/groundtruth/image_02/0000000000.png
             parts = depth_path.parts
 
-            # Detect structure by checking if we have date subfolder
-            if (
-                len(parts) >= 7 and parts[-7].count("_") == 2
-            ):  # Has date folder (2011_09_26)
-                date = parts[-7]
-                drive = parts[-6]
-            else:  # No date folder
-                drive = parts[-6]
-                # Extract date from drive name (first 10 chars)
-                date = "_".join(
-                    drive.split("_")[:3]
-                )  # Get "2011_09_26" from "2011_09_26_drive_0001_sync"
+            # Debug first file
+            if len(drive_groups) == 0:
+                print(f"[DEBUG] First depth file: {depth_path}")
+                print(f"[DEBUG] Parts: {parts}")
+                print(f"[DEBUG] parts[-6]: {parts[-6] if len(parts) > 6 else 'N/A'}")
+                print(f"[DEBUG] parts[-7]: {parts[-7] if len(parts) > 7 else 'N/A'}")
+
+            # Detect structure by checking part names
+            # Look for the drive name (contains "_drive_" and ends with "_sync")
+            drive = None
+            date = None
+
+            for i, part in enumerate(parts):
+                if "_drive_" in part and part.endswith("_sync"):
+                    drive = part
+                    # Extract date from drive name
+                    date = "_".join(
+                        part.split("_")[:3]
+                    )  # "2011_09_26_drive_0001_sync" -> "2011_09_26"
+                    break
+
+            if drive is None:
+                print(f"[WARNING] Could not parse drive from {depth_path}")
+                continue
 
             frame_id = depth_path.stem
 
